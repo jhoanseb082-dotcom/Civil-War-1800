@@ -1,281 +1,228 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<title>Civil War 1861 - PRO</title>
-
-<style>
-body { margin:0; overflow:hidden; background:#000; font-family:Arial; }
-#menu {
-position:absolute; width:100%; height:100%;
-background:rgba(0,0,0,0.85);
-display:flex; flex-direction:column; justify-content:center; align-items:center;
-color:white;
-}
-button { padding:15px; margin:10px; font-size:18px; cursor:pointer; }
-#hud { position:absolute; bottom:20px; left:20px; color:white; display:none; }
-#crosshair {
-position:absolute; top:50%; left:50%;
-width:10px; height:10px;
-border:2px solid white;
-transform:translate(-50%,-50%);
-display:none;
-}
-#message {
-position:absolute; top:40%; width:100%;
-text-align:center; font-size:30px; color:white;
-}
-</style>
+  <meta charset="UTF-8">
+  <title>Guerra Civil 1861</title>
+  <style>
+    body { margin:0; overflow:hidden; background:#000; font-family:sans-serif; }
+    #menu { position:absolute; width:100%; height:100%; background:rgba(0,0,0,0.8);
+            display:flex; flex-direction:column; align-items:center; justify-content:center; color:#f2e8cf; }
+    #hud { position:absolute; top:10px; left:10px; color:white; text-shadow:1px 1px black; display:none; }
+    #mission-message {
+      position:absolute; top:20%; width:100%; text-align:center; font-size:2rem;
+      color:#ffd700; text-shadow:2px 2px #000; display:none;
+    }
+    button { padding:10px 20px; margin:5px; font-size:1.2rem; cursor:pointer;
+             background:#8b5e34; color:#f2e8cf; border:2px solid #f2e8cf; }
+    button:hover { background:#a47148; }
+    #crosshair { position:absolute; top:50%; left:50%; width:12px; height:12px;
+                 margin:-6px 0 0 -6px; border:2px solid white; border-radius:50%; display:none;}
+  </style>
 </head>
-
 <body>
+  <div id="menu">
+    <h1>CIVIL WAR: 1861</h1>
+    <p>Misión actual: <span id="mission-num">1</span></p>
+    <button onclick="iniciarJuego(false)">Nueva Partida</button>
+    <button onclick="iniciarJuego(true)">Continuar</button>
+    <p>(WASD = mover, CLICK = disparar)</p>
+  </div>
+  <div id="hud">
+    <div id="hp-display">SALUD: 100%</div>
+    <div id="weapon-display">FUSIL: CARGADO</div>
+  </div>
+  <div id="mission-message"></div>
+  <div id="crosshair"></div>
 
-<div id="menu">
-<h1>CIVIL WAR 1861</h1>
-<button onclick="start(false)">Nueva partida</button>
-<button onclick="start(true)">Continuar</button>
-</div>
+  <!-- ImportMap para Three.js -->
+  <script type="importmap">
+  {"imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }}
+  </script>
 
-<div id="hud">
-<div id="hp">SALUD: 100%</div>
-<div id="ammo">FUSIL: LISTO</div>
-<div id="mission">MISIÓN 1</div>
-</div>
+  <script type="module">
+  import * as THREE from 'three';
+  import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+  import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+  import { Sky } from 'three/addons/objects/Sky.js';
 
-<div id="crosshair"></div>
-<div id="message"></div>
+  // --- Variables globales ---
+  let scene, camera, renderer, controls, clock;
+  let player = { hp: 100, ammo:1, level: 1 };
+  let enemies = [];
+  let move = { f:false, b:false, l:false, r:false };
+  let isRunning = false;
 
-<script type="importmap">
-{
-"imports": {
-"three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-"three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-}
-}
-</script>
+  // --- Inicialización ---
+  function init() {
+    scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0xaaccff, 10, 200);
+    camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+    camera.position.y = 1.7;
+    renderer = new THREE.WebGLRenderer({ antialias:true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+    // Suelo
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(200,200),
+      new THREE.MeshStandardMaterial({color:0x3d4d2d})
+    );
+    ground.rotation.x = -Math.PI/2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+    // Cielo
+    const sky = new Sky(); sky.scale.setScalar(450000); scene.add(sky);
+    const sun = new THREE.Vector3(); sun.setFromSphericalCoords(1, Math.PI/4, Math.PI/4);
+    sky.material.uniforms['sunPosition'].value.copy(sun);
+    // Iluminación
+    const light = new THREE.DirectionalLight(0xffffff, 1.2);
+    light.position.set(10,20,10); light.castShadow = true; scene.add(light);
+    scene.add(new THREE.AmbientLight(0x404040));
+    // Controles
+    controls = new PointerLockControls(camera, document.body);
+    setupInput();
+    clock = new THREE.Clock();
+    animate();
+  }
 
-<script type="module">
+  // --- Menú ---
+  window.iniciarJuego = function(cargar) {
+    if (cargar) {
+      const save = localStorage.getItem('cw_save');
+      if (save) {
+        const data = JSON.parse(save);
+        player.level = data.level || 1;
+        player.hp    = data.hp    || 100;
+        document.getElementById('mission-num').innerText = player.level;
+        document.getElementById('hp-display').innerText = `SALUD: ${player.hp}%`;
+      }
+    }
+    document.getElementById('menu').style.display = 'none';
+    document.getElementById('hud').style.display  = 'block';
+    document.getElementById('crosshair').style.display = 'block';
+    controls.lock();
+    isRunning = true;
+    spawnEnemies();
+    initAudio();
+  };
 
-import * as THREE from 'three';
-import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+  // --- Fábrica de enemigos ---
+  function spawnEnemies() {
+    // Eliminar previos
+    enemies.forEach(e=>scene.remove(e.mesh));
+    enemies = [];
+    // Crear nuevos
+    for (let i=0; i<2+player.level; i++) {
+      // Usamos cilindro simple en vez de modelo pesado
+      const geo = new THREE.BoxGeometry(1,2,1);
+      const mat = new THREE.MeshStandardMaterial({color: 0x4a4a4a});
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(Math.random()*80-40, 1, -10 - Math.random()*30);
+      mesh.castShadow = true;
+      scene.add(mesh);
+      enemies.push({ mesh: mesh, hp: 100 });
+    }
+  }
 
-let scene, camera, renderer, controls;
-let loader = new GLTFLoader();
-let clock = new THREE.Clock();
+  // --- Disparo con raycast ---
+  const bullet = new THREE.Vector3();
+  function shoot() {
+    if (!isRunning || player.ammo<=0) return;
+    player.ammo = 0;
+    document.getElementById('weapon-display').innerText = "FUSIL: RECARGANDO...";
+    // Efecto flash ligero (no vis)
+    // Raycast
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(), camera);
+    const hits = ray.intersectObjects(enemies.map(e=>e.mesh));
+    if (hits.length>0) {
+      const hitMesh = hits[0].object;
+      // Encontrar enemigo golpeado
+      const idx = enemies.findIndex(e => e.mesh === hitMesh);
+      if (idx !== -1) {
+        scene.remove(enemies[idx].mesh);
+        enemies.splice(idx,1);
+        if (enemies.length===0) {
+          // Misión completada
+          player.level++;
+          localStorage.setItem('cw_save', JSON.stringify({ level: player.level, hp: player.hp }));
+          // Mensaje en UI (sin alert)
+          document.getElementById('mission-num').innerText = player.level;
+          document.getElementById('mission-message').innerText = `¡Misión ${player.level} completada!`;
+          document.getElementById('mission-message').style.display = 'block';
+          setTimeout(() => {
+            document.getElementById('mission-message').style.display = 'none';
+            spawnEnemies();
+          }, 3000);
+        }
+      }
+    }
+    // Recargar balas en 3s
+    setTimeout(() => {
+      player.ammo = 1;
+      document.getElementById('weapon-display').innerText = "FUSIL: CARGADO";
+    }, 3000);
+  }
 
-let player = { hp:100, ammo:1, level:1 };
-let enemies = [];
-let running = false;
+  // --- Entrada de usuario ---
+  function setupInput() {
+    document.addEventListener('keydown', e=>{
+      if (e.code==='KeyW') move.f=true;
+      if (e.code==='KeyS') move.b=true;
+      if (e.code==='KeyA') move.l=true;
+      if (e.code==='KeyD') move.r=true;
+    });
+    document.addEventListener('keyup', e=>{
+      if (e.code==='KeyW') move.f=false;
+      if (e.code==='KeyS') move.b=false;
+      if (e.code==='KeyA') move.l=false;
+      if (e.code==='KeyD') move.r=false;
+    });
+    document.addEventListener('mousedown', shoot);
+  }
 
-let moveF=false, moveB=false, moveL=false, moveR=false;
+  // --- Audio Listener básico ---
+  function initAudio() {
+    const listener = new THREE.AudioListener();
+    camera.add(listener);
+    // (Aquí se pueden cargar sonidos de ambiente, pasos, disparos, etc.)
+    const footSound = new THREE.Audio(listener);
+    const audioLoader = new THREE.AudioLoader();
+    audioLoader.load('assets/sounds/footsteps.mp3', buff => {
+      footSound.setBuffer(buff); footSound.setLoop(true); footSound.setVolume(0.5);
+      footSound.play();
+    });
+  }
 
-let shootSound;
+  // --- Animación principal ---
+  function animate() {
+    requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+    if (isRunning && controls.isLocked) {
+      const speed = 10 * delta;
+      if (move.f) controls.moveForward(speed);
+      if (move.b) controls.moveForward(-speed);
+      if (move.l) controls.moveRight(-speed);
+      if (move.r) controls.moveRight(speed);
+      // Enemigos (IA simple caminan hacia jugador)
+      enemies.forEach(en => {
+        const dir = new THREE.Vector3().subVectors(camera.position, en.mesh.position).normalize();
+        en.mesh.position.addScaledVector(dir, 0.015);
+        en.mesh.lookAt(camera.position.x, en.mesh.position.y, camera.position.z);
+        if (en.mesh.position.distanceTo(camera.position) < 1.5) {
+          player.hp -= 0.3;
+          document.getElementById('hp-display').innerText = `SALUD: ${Math.max(0,Math.floor(player.hp))}%`;
+          if (player.hp <= 0) location.reload();
+        }
+      });
+    }
+    renderer.render(scene, camera);
+  }
 
-// --- INICIO ---
-window.start = function(load){
-
-if(load){
-let save = JSON.parse(localStorage.getItem("save"));
-if(save) player = save;
-}
-
-document.getElementById("menu").style.display="none";
-document.getElementById("hud").style.display="block";
-document.getElementById("crosshair").style.display="block";
-
-controls.lock();
-running = true;
-
-spawnEnemies();
-initAudio();
-}
-
-// --- ESCENA ---
-function init(){
-
-scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb);
-scene.fog = new THREE.Fog(0x87ceeb,10,100);
-
-camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight,0.1,1000);
-camera.position.y = 1.7;
-
-renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
-document.body.appendChild(renderer.domElement);
-
-// luz
-let light = new THREE.DirectionalLight(0xffffff,1.5);
-light.position.set(10,20,10);
-scene.add(light);
-scene.add(new THREE.AmbientLight(0x404040));
-
-// suelo
-let ground = new THREE.Mesh(
-new THREE.PlaneGeometry(300,300),
-new THREE.MeshStandardMaterial({color:0x3d4d2d})
-);
-ground.rotation.x = -Math.PI/2;
-scene.add(ground);
-
-// controles
-controls = new PointerLockControls(camera, document.body);
-
-setupInput();
-animate();
-}
-
-// --- INPUT ---
-function setupInput(){
-
-document.addEventListener("keydown", e=>{
-if(e.code==="KeyW") moveF=true;
-if(e.code==="KeyS") moveB=true;
-if(e.code==="KeyA") moveL=true;
-if(e.code==="KeyD") moveR=true;
-});
-
-document.addEventListener("keyup", e=>{
-if(e.code==="KeyW") moveF=false;
-if(e.code==="KeyS") moveB=false;
-if(e.code==="KeyA") moveL=false;
-if(e.code==="KeyD") moveR=false;
-});
-
-document.addEventListener("mousedown", shoot);
-}
-
-// --- ENEMIGOS ---
-const MODEL = 'https://threejs.org/examples/models/gltf/Soldier.glb';
-
-function spawnEnemies(){
-
-enemies.forEach(e=>scene.remove(e.mesh));
-enemies = [];
-
-for(let i=0;i<player.level+2;i++){
-loader.load(MODEL, g=>{
-let s = g.scene;
-s.scale.set(1,1,1);
-s.position.set(Math.random()*40-20,0,-20-Math.random()*20);
-scene.add(s);
-enemies.push({mesh:s});
-});
-}
-}
-
-// --- DISPARO ---
-function shoot(){
-
-if(!running || !controls.isLocked || player.ammo<=0) return;
-
-player.ammo=0;
-document.getElementById("ammo").innerText="RECARGANDO";
-
-if(shootSound) shootSound.play();
-
-let ray = new THREE.Raycaster();
-ray.setFromCamera(new THREE.Vector2(),camera);
-
-let objs = enemies.map(e=>e.mesh);
-let hit = ray.intersectObjects(objs,true);
-
-if(hit.length>0){
-
-let obj = hit[0].object;
-while(obj.parent && !enemies.find(e=>e.mesh===obj)) obj=obj.parent;
-
-let i = enemies.findIndex(e=>e.mesh===obj);
-
-if(i!=-1){
-scene.remove(enemies[i].mesh);
-enemies.splice(i,1);
-
-if(enemies.length===0){
-nextMission();
-}
-}
-}
-
-setTimeout(()=>{
-player.ammo=1;
-document.getElementById("ammo").innerText="LISTO";
-},2000);
-}
-
-// --- MISIONES ---
-function nextMission(){
-
-player.level++;
-saveGame();
-
-showMessage("MISIÓN "+player.level);
-
-spawnEnemies();
-controls.lock();
-}
-
-// --- GUARDAR ---
-function saveGame(){
-localStorage.setItem("save", JSON.stringify(player));
-}
-
-// --- MENSAJE ---
-function showMessage(txt){
-let m = document.getElementById("message");
-m.innerText = txt;
-setTimeout(()=>m.innerText="",2000);
-}
-
-// --- AUDIO ---
-function initAudio(){
-
-const listener = new THREE.AudioListener();
-camera.add(listener);
-
-const audioLoader = new THREE.AudioLoader();
-shootSound = new THREE.Audio(listener);
-
-audioLoader.load('https://threejs.org/examples/sounds/shot.wav', buffer=>{
-shootSound.setBuffer(buffer);
-shootSound.setVolume(0.5);
-});
-}
-
-// --- LOOP ---
-function animate(){
-requestAnimationFrame(animate);
-
-if(running && controls.isLocked){
-
-let d = clock.getDelta();
-let sp = 10*d;
-
-if(moveF) controls.moveForward(sp);
-if(moveB) controls.moveForward(-sp);
-if(moveL) controls.moveRight(-sp);
-if(moveR) controls.moveRight(sp);
-
-// IA
-enemies.forEach(e=>{
-let dir = new THREE.Vector3().subVectors(camera.position,e.mesh.position).normalize();
-e.mesh.position.addScaledVector(dir,0.02);
-
-if(e.mesh.position.distanceTo(camera.position)<1.5){
-player.hp-=0.2;
-document.getElementById("hp").innerText="SALUD: "+Math.ceil(player.hp)+"%";
-if(player.hp<=0) location.reload();
-}
-});
-}
-
-renderer.render(scene,camera);
-}
-
-init();
-
-</script>
+  init();
+  </script>
 </body>
 </html>
