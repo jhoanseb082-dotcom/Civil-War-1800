@@ -2,131 +2,255 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Civil War: Educational Battlefront</title>
+    <title>Civil War 1861 - Fixed Edition</title>
     <style>
-        :root { --accent: #8b5e34; --bg: #2b1d12; }
-        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #000; }
+        body { margin: 0; overflow: hidden; font-family: 'Arial', sans-serif; background: #000; }
+        #ui-layer { position: absolute; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
         
-        /* Capas de Interfaz */
-        #ui-container { position: absolute; width: 100%; height: 100%; pointer-events: none; color: #f2e8cf; }
-        .overlay { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: all; }
-        
-        /* Menú Principal */
-        #main-menu { width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 10; }
-        #main-menu h1 { font-size: 4rem; text-shadow: 0 0 20px #8b5e34; margin-bottom: 5px; }
-        .btn-group { display: flex; flex-direction: column; gap: 15px; }
-        button { 
-            padding: 15px 50px; font-size: 1.2rem; cursor: pointer; background: var(--accent); 
-            color: white; border: 2px solid #f2e8cf; transition: 0.3s; text-transform: uppercase;
+        /* Menú */
+        #main-menu { 
+            position: absolute; width: 100%; height: 100%; 
+            background: rgba(20, 15, 10, 0.9); display: flex; 
+            flex-direction: column; align-items: center; justify-content: center;
+            pointer-events: all; color: #f2e8cf; text-align: center;
         }
-        button:hover { background: #a47148; transform: scale(1.05); }
+
+        .menu-content { border: 3px double #8b5e34; padding: 40px; background: rgba(0,0,0,0.5); }
+        
+        button { 
+            padding: 15px 40px; margin: 10px; font-size: 1.2rem; 
+            cursor: pointer; background: #8b5e34; color: white; 
+            border: 1px solid #f2e8cf; text-transform: uppercase;
+        }
+        button:hover { background: #a47148; }
 
         /* HUD */
-        #hud { position: absolute; bottom: 0; width: 100%; display: none; padding: 20px; box-sizing: border-box; }
-        .stat-box { background: rgba(0,0,0,0.6); padding: 15px; border-left: 5px solid var(--accent); margin-bottom: 10px; width: fit-content; }
-        #hp-bar-outer { width: 200px; height: 15px; background: #444; margin-top: 5px; }
-        #hp-bar-inner { width: 100%; height: 100%; background: #c1121f; transition: 0.3s; }
-        
-        #mission-card { position: absolute; top: 20px; right: 20px; text-align: right; }
-        #reloading-indicator { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 2rem; color: gold; display: none; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; border: 2px solid white; border-radius: 50%; transform: translate(-50%, -50%); }
-
-        /* Pantallas de Estado */
-        #screen-msg { display: none; background: rgba(0,0,0,0.9); z-index: 20; width: 100%; height: 100%; text-align: center; }
+        #hud { 
+            position: absolute; bottom: 20px; left: 20px; color: white; 
+            display: none; pointer-events: none; text-shadow: 2px 2px #000;
+        }
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; width: 10px; height: 10px;
+            border: 1px solid white; border-radius: 50%; transform: translate(-50%, -50%);
+            display: none;
+        }
     </style>
 </head>
 <body>
 
-<div id="ui-container">
-    <div id="main-menu" class="overlay">
-        <h1>CIVIL WAR 1861</h1>
-        <p>Experiencia Educativa de Inmersión Histórica</p>
-        <div class="btn-group">
-            <button onclick="gameState.init(false)">Nueva Partida</button>
-            <button onclick="gameState.init(true)">Continuar Partida</button>
-            <button onclick="alert('Programado por J. Sebastian Rincón\nUso pedagógico.')">Créditos</button>
+    <div id="ui-layer">
+        <div id="main-menu">
+            <div class="menu-content">
+                <h1>CIVIL WAR: 1861</h1>
+                <p>Misión Actual: <span id="mission-num">1</span></p>
+                <div id="btn-container">
+                    <button onclick="window.iniciarJuego(false)">NUEVA PARTIDA</button>
+                    <button onclick="window.iniciarJuego(true)">CONTINUAR</button>
+                </div>
+            </div>
         </div>
-    </div>
 
-    <div id="hud">
-        <div id="mission-card">
-            <h2 id="mission-title">Misión 1: Entrenamiento</h2>
-            <p id="mission-desc">Objetivos: 0 / 5</p>
-        </div>
-        <div class="stat-box">
-            SALUD
-            <div id="hp-bar-outer"><div id="hp-bar-inner"></div></div>
-        </div>
-        <div class="stat-box">
-            MUNICIÓN: <span id="ammo-count">1 / 1</span>
+        <div id="hud">
+            <h2 id="hp-display">SALUD: 100%</h2>
+            <h3 id="status-display">FUSIL: CARGADO</h3>
         </div>
         <div id="crosshair"></div>
-        <div id="reloading-indicator">RECARGANDO...</div>
     </div>
 
-    <div id="screen-msg" class="overlay">
-        <h1 id="status-text">VICTORIA</h1>
-        <button onclick="location.reload()">Regresar al Menú</button>
-    </div>
-</div>
-
-<script type="importmap">
-    {
-        "imports": {
-            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
         }
-    }
-</script>
+    </script>
 
-<script type="module">
-    import * as THREE from 'three';
-    import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
-    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
-    // --- CONFIGURACIÓN Y ESTADO ---
-    const gameState = {
-        mission: 1,
-        hp: 100,
-        enemiesKilled: 0,
-        isPaused: true,
-        ammo: 1,
-        side: 'union',
-        
-        init(loadSaved) {
-            if(loadSaved) {
-                const saved = JSON.parse(localStorage.getItem('civilWarSave'));
-                if(saved) {
-                    this.mission = saved.mission;
-                    this.hp = saved.hp;
+        // --- ESTADO DEL JUEGO ---
+        let scene, camera, renderer, controls, clock;
+        let player = { hp: 100, ammo: 1, level: 1 };
+        let enemies = [];
+        let isRunning = false;
+        let moveF = false, moveB = false, moveL = false, moveR = false;
+
+        // --- SOLUCIÓN AL ERROR DE MENÚ: Funciones Globales ---
+        window.iniciarJuego = function(cargarGuardado) {
+            if(cargarGuardado) {
+                const save = localStorage.getItem('cw_save');
+                if(save) {
+                    const data = JSON.parse(save);
+                    player.level = data.level;
+                    document.getElementById('mission-num').innerText = player.level;
                 }
             }
+            
+            // Ocultar menú y activar controles
             document.getElementById('main-menu').style.display = 'none';
             document.getElementById('hud').style.display = 'block';
+            document.getElementById('crosshair').style.display = 'block';
+            
             controls.lock();
-            this.isPaused = false;
-            setupMission();
-            startAudio();
-        },
+            isRunning = true;
+            spawnEnemies();
+            
+            // Iniciar Audio (Chrome requiere interacción)
+            initAudio();
+        };
 
-        save() {
-            localStorage.setItem('civilWarSave', JSON.stringify({mission: this.mission, hp: this.hp}));
-        },
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb);
+            scene.fog = new THREE.Fog(0x87ceeb, 10, 100);
 
-        die() {
-            this.isPaused = true;
-            controls.unlock();
-            document.getElementById('screen-msg').style.display = 'flex';
-            document.getElementById('status-text').innerText = "CAÍDO EN COMBATE";
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+            camera.position.y = 1.7;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // Luces
+            const light = new THREE.DirectionalLight(0xffffff, 1.5);
+            light.position.set(10, 20, 10);
+            light.castShadow = true;
+            scene.add(light);
+            scene.add(new THREE.AmbientLight(0x404040));
+
+            // Suelo
+            const ground = new THREE.Mesh(
+                new THREE.PlaneGeometry(200, 200),
+                new THREE.MeshStandardMaterial({ color: 0x3d4d2d })
+            );
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Controles
+            controls = new PointerLockControls(camera, document.body);
+            
+            window.addEventListener('resize', onResize);
+            setupInput();
+            
+            clock = new THREE.Clock();
+            animate();
         }
-    };
 
-    // --- ESCENA Y MOTOR ---
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87ceeb);
-    scene.fog = new THREE.Fog(0x87ceeb, 1, 100);
+        function setupInput() {
+            document.addEventListener('keydown', (e) => {
+                if(e.code === 'KeyW') moveF = true;
+                if(e.code === 'KeyS') moveB = true;
+                if(e.code === 'KeyA') moveL = true;
+                if(e.code === 'KeyD') moveR = true;
+            });
+            document.addEventListener('keyup', (e) => {
+                if(e.code === 'KeyW') moveF = false;
+                if(e.code === 'KeyS') moveB = false;
+                if(e.code === 'KeyA') moveL = false;
+                if(e.code === 'KeyD') moveR = false;
+            });
+            document.addEventListener('mousedown', shoot);
+        }
 
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.
+        function spawnEnemies() {
+            // Eliminar antiguos
+            enemies.forEach(e => scene.remove(e.mesh));
+            enemies = [];
+
+            // Crear enemigos (Cilindros para asegurar que cargue sin fallos de assets)
+            for(let i=0; i < 2 + player.level; i++) {
+                const geo = new THREE.CapsuleGeometry(0.5, 1, 4, 8);
+                const mat = new THREE.MeshStandardMaterial({ color: 0x4a4a4a });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set(Math.random()*40-20, 1, -15 - Math.random()*20);
+                mesh.castShadow = true;
+                scene.add(mesh);
+                enemies.push({ mesh, hp: 100 });
+            }
+        }
+
+        function shoot() {
+            if(!isRunning || player.ammo <= 0) return;
+
+            player.ammo = 0;
+            document.getElementById('status-display').innerText = "FUSIL: RECARGANDO...";
+            
+            // Efecto flash
+            const light = new THREE.PointLight(0xffaa00, 10, 5);
+            light.position.copy(camera.position);
+            scene.add(light);
+            setTimeout(() => scene.remove(light), 50);
+
+            // Raycast
+            const ray = new THREE.Raycaster();
+            ray.setFromCamera(new THREE.Vector2(), camera);
+            const targets = enemies.map(e => e.mesh);
+            const hits = ray.intersectObjects(targets);
+
+            if(hits.length > 0) {
+                const hitObj = hits[0].object;
+                const idx = enemies.findIndex(e => e.mesh === hitObj);
+                if(idx !== -1) {
+                    scene.remove(enemies[idx].mesh);
+                    enemies.splice(idx, 1);
+                    if(enemies.length === 0) {
+                        player.level++;
+                        localStorage.setItem('cw_save', JSON.stringify({level: player.level}));
+                        alert("Misión completada. Preparando siguiente frente...");
+                        spawnEnemies();
+                    }
+                }
+            }
+
+            setTimeout(() => {
+                player.ammo = 1;
+                document.getElementById('status-display').innerText = "FUSIL: CARGADO";
+            }, 3500);
+        }
+
+        function initAudio() {
+            // Audio básico para evitar errores de carga
+            const listener = new THREE.AudioListener();
+            camera.add(listener);
+        }
+
+        function onResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if(isRunning && controls.isLocked) {
+                const delta = clock.getDelta();
+                const speed = 10 * delta;
+
+                if(moveF) controls.moveForward(speed);
+                if(moveB) controls.moveForward(-speed);
+                if(moveL) controls.moveRight(-speed);
+                if(moveR) controls.moveRight(speed);
+
+                // IA
+                enemies.forEach(en => {
+                    const dir = new THREE.Vector3().subVectors(camera.position, en.mesh.position).normalize();
+                    en.mesh.position.addScaledVector(dir, 0.02);
+                    
+                    if(en.mesh.position.distanceTo(camera.position) < 1.5) {
+                        player.hp -= 0.2;
+                        document.getElementById('hp-display').innerText = `SALUD: ${Math.ceil(player.hp)}%`;
+                        if(player.hp <= 0) location.reload();
+                    }
+                });
+            }
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>
